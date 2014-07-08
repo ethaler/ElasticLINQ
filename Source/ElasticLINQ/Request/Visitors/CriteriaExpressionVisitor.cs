@@ -54,6 +54,11 @@ namespace ElasticLinq.Request.Visitors
             return base.VisitMethodCall(m);
         }
 
+        protected static ICriteria ApplyQueryContainsCriteria(ICriteria currentRoot, ICriteria newCriteria)
+        {
+            return BoolQueryCriteria.CombineMustQueryCriteria(currentRoot, newCriteria);
+        }
+
         protected static ICriteria ApplyCriteria(ICriteria currentRoot, ICriteria newCriteria)
         {
             return currentRoot == null

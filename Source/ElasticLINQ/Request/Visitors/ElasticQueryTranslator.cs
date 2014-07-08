@@ -74,6 +74,9 @@ namespace ElasticLinq.Request.Visitors
 
         protected override Expression VisitMethodCall(MethodCallExpression m)
         {
+            if (m.Method.DeclaringType == typeof (string) &&
+                string.Equals(m.Method.Name, "Contains", StringComparison.InvariantCultureIgnoreCase))
+                return VisitStringContains(m);
             if (m.Method.DeclaringType == typeof(Queryable))
                 return VisitQueryableMethodCall(m);
 
@@ -87,6 +90,22 @@ namespace ElasticLinq.Request.Visitors
                     return m;
 
             return base.VisitMethodCall(m);
+        }
+
+        internal Expression VisitStringContains(MethodCallExpression m)
+        {
+            var memberExp = m.Object as MemberExpression;
+            if (memberExp == null)
+                throw new NotSupportedException("Contains is only supported as Member access e.g. obj.prop.Contains(\"a\") ");
+            
+            var searchArg = m.Arguments.FirstOrDefault();
+            var searchString = "*";
+            if (searchArg != null && !string.IsNullOrWhiteSpace(searchArg.ToString()))
+                searchString += searchArg.ToString()+"*";
+
+            var criteriaExpression = new CriteriaExpression(new WildcardCriteria(memberExp.Member.Name, searchString));
+            searchRequest.Query = ApplyQueryContainsCriteria(searchRequest.Query, criteriaExpression.Criteria);
+            return criteriaExpression;
         }
 
         internal Expression VisitElasticQueryExtensionsMethodCall(MethodCallExpression m)
