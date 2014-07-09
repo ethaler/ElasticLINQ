@@ -102,7 +102,7 @@ namespace ElasticLinq.Request.Formatters
             var orderableFacet = facet as IOrderableFacet;
             if (orderableFacet != null && orderableFacet.Size.HasValue)
                 specificBody["size"] = orderableFacet.Size.Value.ToString(CultureInfo.InvariantCulture);
-            
+
             var namedBody = new JObject(new JProperty(facet.Type, specificBody));
 
             var combinedFilter = AndCriteria.Combine(primaryFilter, facet.Filter);
@@ -202,12 +202,17 @@ namespace ElasticLinq.Request.Formatters
                 return Build((MatchAllCriteria)criteria);
 
             // Base class formatters using name property
+            if (criteria is WildcardCriteria)
+                return Build((WildcardCriteria)criteria);
 
             if (criteria is SingleFieldCriteria)
                 return Build((SingleFieldCriteria)criteria);
 
             if (criteria is CompoundCriteria)
                 return Build((CompoundCriteria)criteria);
+            
+            if (criteria is BoolQueryCriteria)
+                return Build((BoolQueryCriteria)criteria);
 
             throw new InvalidOperationException(String.Format("Unknown criteria type {0}", criteria.GetType()));
         }
@@ -245,6 +250,13 @@ namespace ElasticLinq.Request.Formatters
                     new JProperty(criteria.Field, mapping.FormatValue(criteria.Member, criteria.Value)))));
         }
 
+        private JObject Build(WildcardCriteria criteria)
+        {
+            return new JObject(
+                new JProperty(criteria.Name, new JObject(
+                    new JProperty(criteria.Field, mapping.FormatValue(criteria.Member, criteria.Search)))));
+        }
+
         private JObject Build(TermsCriteria criteria)
         {
             var termsCriteria = new JObject(
@@ -280,6 +292,20 @@ namespace ElasticLinq.Request.Formatters
                 : new JObject(new JProperty(criteria.Name, new JArray(criteria.Criteria.Select(Build).ToList())));
         }
 
+        private JObject Build(BoolQueryCriteria criteria)
+        {
+            var jBool = new JObject();
+            if (criteria.MustCriteria.Any())
+                jBool.Add(new JProperty("must", new JArray(criteria.MustCriteria.Select(Build).ToList())));
+            if (criteria.ShouldCriteria.Any())
+                jBool.Add(new JProperty("should", new JArray(criteria.ShouldCriteria.Select(Build).ToList())));
+            if (criteria.MustNotCriteria.Any())
+                jBool.Add(new JProperty("must_not", new JArray(criteria.MustNotCriteria.Select(Build).ToList())));
+
+            if(!jBool.HasValues)
+                throw new InvalidOperationException("Invalid BoolQueryCriteria, no MustCriteria, ShouldCriteria or MustNotCriteria defined!");
+            return new JObject(new JProperty(criteria.Name, jBool));
+        }
         internal static string Format(TimeSpan timeSpan)
         {
             if (timeSpan.Milliseconds != 0)

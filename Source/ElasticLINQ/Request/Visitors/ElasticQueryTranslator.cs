@@ -100,10 +100,15 @@ namespace ElasticLinq.Request.Visitors
             
             var searchArg = m.Arguments.FirstOrDefault();
             var searchString = "*";
-            if (searchArg != null && !string.IsNullOrWhiteSpace(searchArg.ToString()))
-                searchString += searchArg.ToString()+"*";
+            if (searchArg != null)
+            {
+                var search = searchArg.ToString().TrimStart(new []{'\"'}).TrimEnd(new []{'\"'});
+                
+                if(!string.IsNullOrWhiteSpace(search))
+                    searchString += search + "*";
+            }
 
-            var criteriaExpression = new CriteriaExpression(new WildcardCriteria(memberExp.Member.Name, searchString));
+            var criteriaExpression = new CriteriaExpression(new WildcardCriteria(Mapping.GetFieldName(Prefix, memberExp.Member),memberExp.Member, searchString));
             searchRequest.Query = ApplyQueryContainsCriteria(searchRequest.Query, criteriaExpression.Criteria);
             return criteriaExpression;
         }
