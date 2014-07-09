@@ -243,14 +243,74 @@ namespace ElasticLinq.Request.Visitors
 
         private Expression VisitAndAlso(BinaryExpression b)
         {
+            var vLIsQueryCriteria = false;
+            var vRIsQueryCriteria = false;
+
+            var visitedL = Visit(b.Left);
+            var visitedR = Visit(b.Right);
+            
+            var vLCritExpr = visitedL as CriteriaExpression;
+            var vRCritExpr = visitedR as CriteriaExpression;
+
+            if (vLCritExpr != null && vLCritExpr.Criteria is IsQueryCriteria)
+                vLIsQueryCriteria = true;
+            if (vRCritExpr != null && vRCritExpr.Criteria is IsQueryCriteria)
+                vRIsQueryCriteria = true;
+            
+            //Query Expression like wildcard are handled by the Query and therefore should not end in the filter part as the AndCriteria would
+            if (vLIsQueryCriteria || vRIsQueryCriteria)
+            {
+                if (vLIsQueryCriteria)
+                {
+                    if (vRIsQueryCriteria)
+                    {
+                        //both sides are query criteria so return null to keep them away from the filter
+                        return null;
+                    }
+                    //left is a query criteria and will be handled but we still have to process the right side
+                    return visitedR;
+                }
+                // right is query criteria 
+                return visitedL;
+            }
             return new CriteriaExpression(
-                AndCriteria.Combine(AssertExpressionsOfType<CriteriaExpression>(b.Left, b.Right).Select(f => f.Criteria).ToArray()));
+                AndCriteria.Combine(AssertExpressionsOfType<CriteriaExpression>(visitedL, visitedR).Select(f => f.Criteria).ToArray()));
         }
 
         private Expression VisitOrElse(BinaryExpression b)
         {
+            var vLIsQueryCriteria = false;
+            var vRIsQueryCriteria = false;
+
+            var visitedL = Visit(b.Left);
+            var visitedR = Visit(b.Right);
+
+            var vLCritExpr = visitedL as CriteriaExpression;
+            var vRCritExpr = visitedR as CriteriaExpression;
+
+            if (vLCritExpr != null && vLCritExpr.Criteria is IsQueryCriteria)
+                vLIsQueryCriteria = true;
+            if (vRCritExpr != null && vRCritExpr.Criteria is IsQueryCriteria)
+                vRIsQueryCriteria = true;
+
+            //Query Expression like wildcard are handled by the Query and therefore should not end in the filter part as the OrCriteria would
+            if (vLIsQueryCriteria || vRIsQueryCriteria)
+            {
+                if (vLIsQueryCriteria)
+                {
+                    if (vRIsQueryCriteria)
+                    {
+                        //both sides are query criteria so return null to keep them away from the filter
+                        return null;
+                    }
+                    //left is a query criteria and will be handled but we still have to process the right side
+                    return visitedR;
+                }
+                // right is query criteria 
+                return visitedL;
+            }
             return new CriteriaExpression(
-                OrCriteria.Combine(AssertExpressionsOfType<CriteriaExpression>(b.Left, b.Right).Select(f => f.Criteria).ToArray()));
+                OrCriteria.Combine(AssertExpressionsOfType<CriteriaExpression>(visitedL, visitedR).Select(f => f.Criteria).ToArray()));
         }
 
         private IEnumerable<T> AssertExpressionsOfType<T>(params Expression[] expressions) where T : Expression

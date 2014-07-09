@@ -11,7 +11,7 @@ namespace ElasticLinq.Request.Criteria
     /// Criteria that specifies the value that a
     /// field must match in order to select a document. Supported wildcard's are ?*
     /// </summary>
-    internal class WildcardCriteria : ICriteria
+    internal class WildcardCriteria : ICriteria, IsQueryCriteria
     {
         private readonly string search;
         private readonly string field;

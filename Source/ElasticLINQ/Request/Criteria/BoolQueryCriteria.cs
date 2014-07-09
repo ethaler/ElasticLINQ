@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace ElasticLinq.Request.Criteria
 {
-    internal class BoolQueryCriteria : ICriteria
+    internal class BoolQueryCriteria : ICriteria, IsQueryCriteria
     {
         private readonly List<ICriteria> mustCriteria;
         private readonly List<ICriteria> mustNotCriteria;

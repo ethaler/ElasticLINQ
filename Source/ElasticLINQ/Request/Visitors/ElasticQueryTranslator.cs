@@ -40,6 +40,8 @@ namespace ElasticLinq.Request.Visitors
         private ElasticTranslateResult Translate(Expression e)
         {
             var evaluated = PartialEvaluator.Evaluate(e);
+            //visit before Facet and  revisit later where necessary
+            evaluated = Visit(evaluated);
             var aggregated = FacetExpressionVisitor.Rebind(Mapping, Prefix, evaluated);
 
             if (aggregated.Collected.Count > 0)
@@ -282,7 +284,8 @@ namespace ElasticLinq.Request.Visitors
             var criteriaExpression = body as CriteriaExpression;
             if (criteriaExpression == null)
                 throw new NotSupportedException(String.Format("Unknown Where predicate '{0}'", body));
-
+            //do not set filter if criteria is a single query criteria
+            if(!(criteriaExpression.Criteria is IsQueryCriteria))
             searchRequest.Filter = ApplyCriteria(searchRequest.Filter, criteriaExpression.Criteria);
 
             return Visit(source);
