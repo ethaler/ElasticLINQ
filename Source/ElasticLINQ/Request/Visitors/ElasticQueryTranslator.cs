@@ -61,7 +61,7 @@ namespace ElasticLinq.Request.Visitors
                 searchRequest.Filter = Mapping.GetTypeExistsCriteria(sourceType);
 
             if (materializer == null)
-                materializer = new ElasticManyHitsMaterializer(itemProjector ?? DefaultItemProjector, finalItemType ?? sourceType);
+                materializer = new ManyHitsElasticMaterializer(itemProjector ?? DefaultItemProjector, finalItemType ?? sourceType);
         }
 
         private void CompleteFacetTranslation(RebindCollectionResult<IFacet> aggregated)
@@ -127,6 +127,8 @@ namespace ElasticLinq.Request.Visitors
                 case "QueryString":
                     if (m.Arguments.Count == 2)
                         return VisitQueryString(m.Arguments[0], m.Arguments[1]);
+                    if (m.Arguments.Count == 3)
+                        return VisitQueryString(m.Arguments[0], m.Arguments[1], m.Arguments[2]);
                     break;
 
                 case "OrderByScore":
@@ -141,10 +143,12 @@ namespace ElasticLinq.Request.Visitors
             throw new NotSupportedException(string.Format("The ElasticQuery method '{0}' is not supported", m.Method.Name));
         }
 
-        private Expression VisitQueryString(Expression source, Expression queryExpression)
+        private Expression VisitQueryString(Expression source, Expression queryExpression, Expression fieldsExpression = null)
         {
             var constantQueryExpression = (ConstantExpression)queryExpression;
-            var criteriaExpression = new CriteriaExpression(new QueryStringCriteria(constantQueryExpression.Value.ToString()));
+            var constantFieldExpression = fieldsExpression as ConstantExpression;
+            var constantFields = constantFieldExpression == null ? null : (string[])constantFieldExpression.Value;
+            var criteriaExpression = new CriteriaExpression(new QueryStringCriteria(constantQueryExpression.Value.ToString(), constantFields));
             searchRequest.Query = ApplyCriteria(searchRequest.Query, criteriaExpression.Criteria);
 
             return Visit(source);
@@ -264,6 +268,8 @@ namespace ElasticLinq.Request.Visitors
         private Expression VisitQuery(Expression source, Expression predicate)
         {
             var lambda = predicate.GetLambda();
+            var wasWithin = Within;
+            Within = CriteriaWithin.Query;;
             var body = BooleanMemberAccessBecomesEquals(lambda.Body);
 
             var criteriaExpression = body as CriteriaExpression;
@@ -271,6 +277,7 @@ namespace ElasticLinq.Request.Visitors
                 throw new NotSupportedException(string.Format("Unknown Query predicate '{0}'", body));
 
             searchRequest.Query = ApplyCriteria(searchRequest.Query, criteriaExpression.Criteria);
+            Within = wasWithin;
 
             return Visit(source);
         }
