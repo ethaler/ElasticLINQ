@@ -220,13 +220,7 @@ namespace ElasticLinq.Request.Formatters
         private static JObject Build(QueryStringCriteria criteria)
         {
             var unformattedValue = criteria.Value; // We do not reformat query_string
-
-            var queryStringCriteria =  new JObject(new JProperty("query", unformattedValue));
-
-            if (criteria.Fields.Any())
-                queryStringCriteria.Add(new JProperty("fields", new JArray(criteria.Fields)));
-
-            return new JObject(new JProperty(criteria.Name, queryStringCriteria));
+            return new JObject(new JProperty(criteria.Name, new JObject(new JProperty("query", unformattedValue))));
         }
 
         private JObject Build(RangeCriteria criteria)

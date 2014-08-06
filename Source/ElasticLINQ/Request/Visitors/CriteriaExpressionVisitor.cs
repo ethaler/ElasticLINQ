@@ -13,8 +13,6 @@ using System.Reflection;
 
 namespace ElasticLinq.Request.Visitors
 {
-    enum CriteriaWithin { Query, Filter };
-
     /// <summary>
     /// Expression visitor to translate predicate expressions to criteria expressions.
     /// Used by Where, Query, Single, First, Count etc.
@@ -24,31 +22,20 @@ namespace ElasticLinq.Request.Visitors
         protected readonly IElasticMapping Mapping;
         protected readonly string Prefix;
 
-        protected CriteriaWithin Within { get; set; }
-
         protected CriteriaExpressionVisitor(IElasticMapping mapping, string prefix)
         {
             Mapping = new ElasticFieldsMappingWrapper(mapping);
             Prefix = prefix;
-            Within = CriteriaWithin.Filter;
         }
 
         protected override Expression VisitMethodCall(MethodCallExpression m)
         {
-            if (m.Method.DeclaringType == typeof(string))
-                return VisitStringMethodCall(m);
-
             if (m.Method.DeclaringType == typeof(Enumerable))
                 return VisitEnumerableMethodCall(m);
 
             if (m.Method.DeclaringType == typeof(ElasticMethods))
                 return VisitElasticMethodsMethodCall(m);
 
-            return VisitDefaultMethodCall(m);
-        }
-
-        private Expression VisitDefaultMethodCall(MethodCallExpression m)
-        {
             switch (m.Method.Name)
             {
                 case "Equals":
@@ -118,29 +105,6 @@ namespace ElasticLinq.Request.Visitors
             }
 
             throw new NotSupportedException(string.Format("The Enumerable method '{0}' is not supported", m.Method.Name));
-        }
-
-        protected Expression VisitStringMethodCall(MethodCallExpression m)
-        {
-            switch (m.Method.Name)
-            {
-                case "Contains":  // Where(x => x.StringProperty.Contains(value))
-                    if (m.Arguments.Count == 1)
-                        return VisitStringPatternCheckMethodCall(m.Object, m.Arguments[0], "*{0}*", m.Method.Name);
-                    break;
-
-                case "StartsWith": // Where(x => x.StringProperty.StartsWith(value))
-                    if (m.Arguments.Count == 1)
-                        return VisitStringPatternCheckMethodCall(m.Object, m.Arguments[0], "{0}*", m.Method.Name);
-                    break;
-
-                case "EndsWith": // Where(x => x.StringProperty.EndsWith(value))
-                    if (m.Arguments.Count == 1)
-                        return VisitStringPatternCheckMethodCall(m.Object, m.Arguments[0], "*{0}", m.Method.Name);
-                    break;
-            }
-
-            return VisitDefaultMethodCall(m);
         }
 
         protected override Expression VisitUnary(UnaryExpression node)
@@ -277,24 +241,6 @@ namespace ElasticLinq.Request.Visitors
             throw new NotSupportedException(string.Format("Unknown source '{0}' for Contains operation", source));
         }
 
-        private Expression VisitStringPatternCheckMethodCall(Expression source, Expression match, string pattern, string methodName)
-        {
-            if (Within != CriteriaWithin.Query)
-                throw new NotSupportedException(string.Format("Method String.'{0}' can only be used within .Query() not in .Where()", methodName));
-
-            var matched = Visit(match);
-
-            if (source is MemberExpression && matched is ConstantExpression)
-            {
-                var member = ((MemberExpression)source).Member;
-                var field = Mapping.GetFieldName(Prefix, member);
-                var value = ((ConstantExpression)matched).Value;
-                return new CriteriaExpression(new QueryStringCriteria(String.Format(pattern, value), field));
-            }
-
-            throw new NotSupportedException(string.Format("Unknown source '{0}' for '{1}' operation", source, methodName));
-        }
-
         private Expression VisitAndAlso(BinaryExpression b)
         {
             var vLIsQueryCriteria = false;
@@ -302,7 +248,7 @@ namespace ElasticLinq.Request.Visitors
 
             var visitedL = Visit(b.Left);
             var visitedR = Visit(b.Right);
-            
+
             var vLCritExpr = visitedL as CriteriaExpression;
             var vRCritExpr = visitedR as CriteriaExpression;
 
@@ -310,20 +256,12 @@ namespace ElasticLinq.Request.Visitors
                 vLIsQueryCriteria = true;
             if (vRCritExpr != null && vRCritExpr.Criteria is IsQueryCriteria)
                 vRIsQueryCriteria = true;
-            
+
             //Query Expression like wildcard are handled by the Query and therefore should not end in the filter part as the AndCriteria would
             if (vLIsQueryCriteria || vRIsQueryCriteria)
             {
                 if (vLIsQueryCriteria)
-                {
-                    if (vRIsQueryCriteria)
-                    {
-                        //both sides are query criteria so return null to keep them away from the filter
-                        return null;
-                    }
-                    //left is a query criteria and will be handled but we still have to process the right side
                     return visitedR;
-                }
                 // right is query criteria 
                 return visitedL;
             }
@@ -351,15 +289,7 @@ namespace ElasticLinq.Request.Visitors
             if (vLIsQueryCriteria || vRIsQueryCriteria)
             {
                 if (vLIsQueryCriteria)
-                {
-                    if (vRIsQueryCriteria)
-                    {
-                        //both sides are query criteria so return null to keep them away from the filter
-                        return null;
-                    }
-                    //left is a query criteria and will be handled but we still have to process the right side
                     return visitedR;
-                }
                 // right is query criteria 
                 return visitedL;
             }
