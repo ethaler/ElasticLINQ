@@ -1,5 +1,6 @@
 ﻿// Licensed under the Apache 2.0 License. See LICENSE.txt in the project root for more information.
 
+using System.Linq.Expressions;
 using ElasticLinq.Request.Criteria;
 using Newtonsoft.Json.Linq;
 using System;
@@ -56,6 +57,8 @@ namespace ElasticLinq.Mapping
         /// <param name="memberInfo">The member whose name is required.</param>
         /// <returns>Returns the ElasticSearch field name that matches the member.</returns>
         string GetFieldName(string prefix, MemberInfo memberInfo);
+
+        string GetFieldName(string prefix, MemberExpression memberExpression);
 
         /// <summary>
         /// Gets criteria that can be used to find documents of a particular type. Will be used by

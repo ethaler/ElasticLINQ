@@ -81,15 +81,7 @@ namespace ElasticLinq.Test.Mapping
             Assert.Equal(expected, actual);
         }
 
-        [Fact]
-        [ExcludeFromCodeCoverage] // Expression isn't "executed"
-        public static void GetFieldName_GuardClause()
-        {
-            var mapping = new ElasticMapping();
-
-            Assert.Throws<ArgumentNullException>(() => mapping.GetFieldName("", null));
-        }
-
+        
         private class SingularTypeName { }
         private class PluralTypeNames { }
 

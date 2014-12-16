@@ -1,5 +1,6 @@
 ﻿// Licensed under the Apache 2.0 License. See LICENSE.txt in the project root for more information.
 
+using System.Linq.Expressions;
 using ElasticLinq.Request.Criteria;
 using ElasticLinq.Utility;
 using Newtonsoft.Json.Linq;
@@ -71,6 +72,22 @@ namespace ElasticLinq.Mapping
             return String.Format("{0}.{1}", prefix, memberName).TrimStart('.');
         }
 
+        public virtual string GetFieldName(string prefix, MemberExpression memberExpression)
+        {
+            Argument.EnsureNotNull("memberExpression", memberExpression);
+
+            switch (memberExpression.Expression.NodeType)
+            {
+                case ExpressionType.MemberAccess:
+                    return GetFieldName(GetFieldName(prefix, (MemberExpression)memberExpression.Expression), memberExpression.Member);
+
+                case ExpressionType.Parameter:
+                    return GetFieldName(prefix, memberExpression.Member);
+
+                default:
+                    throw new NotSupportedException(String.Format("Unknown expression type {0} for left hand side of expression {1}", memberExpression.Expression.NodeType, memberExpression));
+            }
+        }
         /// <inheritdoc/>
         public virtual string GetDocumentMappingPrefix(Type type)
         {

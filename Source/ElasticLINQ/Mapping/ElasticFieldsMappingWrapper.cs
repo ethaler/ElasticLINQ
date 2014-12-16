@@ -1,5 +1,6 @@
 ﻿// Licensed under the Apache 2.0 License. See LICENSE.txt in the project root for more information.
 
+using System.Linq.Expressions;
 using ElasticLinq.Request.Criteria;
 using Newtonsoft.Json.Linq;
 using System;
@@ -48,6 +49,13 @@ namespace ElasticLinq.Mapping
                     : wrapped.GetFieldName(prefix, memberInfo);
         }
 
+        public string GetFieldName(string prefix, MemberExpression memberExpression)
+        {
+            return
+                memberExpression.Member.DeclaringType == typeof(ElasticFields)
+                    ? "_" + memberExpression.Member.Name.ToLowerInvariant()
+                    : wrapped.GetFieldName(prefix, memberExpression);
+        }
         /// <inheritdoc/>
         public ICriteria GetTypeExistsCriteria(Type docType)
         {

@@ -110,11 +110,11 @@ namespace ElasticLinq.Request.Visitors
                     searchString += search + "*";
             }
 
-            var criteriaExpression = new CriteriaExpression(new WildcardCriteria(Mapping.GetFieldName(Prefix, memberExp.Member),memberExp.Member, searchString));
-            searchRequest.Query = ApplyQueryContainsCriteria(searchRequest.Query, criteriaExpression.Criteria);
+            var criteriaExpression = new CriteriaExpression(new WildcardCriteria(Mapping.GetFieldName(Prefix, memberExp),memberExp.Member, searchString));
+            //searchRequest.Query = ApplyQueryContainsCriteria(searchRequest.Query, criteriaExpression.Criteria);
             return criteriaExpression;
         }
-
+        
         internal Expression VisitElasticQueryExtensionsMethodCall(MethodCallExpression m)
         {
             switch (m.Method.Name)
@@ -293,9 +293,11 @@ namespace ElasticLinq.Request.Visitors
             var criteriaExpression = body as CriteriaExpression;
             if (criteriaExpression == null)
                 throw new NotSupportedException(String.Format("Unknown Where predicate '{0}'", body));
-            //do not set filter if criteria is a single query criteria
-            if(!(criteriaExpression.Criteria is IsQueryCriteria))
-            searchRequest.Filter = ApplyCriteria(searchRequest.Filter, criteriaExpression.Criteria);
+            //set query explicit if criteria is a single query criteria
+            if(criteriaExpression.Criteria is IsQueryCriteria)
+                searchRequest.Query = ApplyCriteria(searchRequest.Query, criteriaExpression.Criteria);
+            else
+                searchRequest.Filter = ApplyCriteria(searchRequest.Filter, criteriaExpression.Criteria);
 
             return Visit(source);
         }

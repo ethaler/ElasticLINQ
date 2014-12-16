@@ -44,6 +44,30 @@ namespace ElasticLinq.Request.Criteria
             }
         }
 
+        public static ICriteria CombineShouldQueryCriteria(ICriteria rootCriteria, ICriteria newCriteria)
+        {
+            if (rootCriteria == null)
+                return new BoolQueryCriteria(null,null,Enumerable.Repeat(newCriteria, 1));
+            else
+            {
+                var rootBool = rootCriteria as BoolQueryCriteria;
+                if (rootBool != null)
+                {
+
+                    var should = new List<ICriteria>(rootBool.ShouldCriteria);
+                    should.Add(newCriteria);
+                    return new BoolQueryCriteria(rootBool.MustCriteria, rootBool.mustNotCriteria, should);
+                }
+                else
+                {
+                    var should = new List<ICriteria>();
+                    should.Add(rootCriteria);
+                    should.Add(newCriteria);
+                    return new BoolQueryCriteria(null,null,should);
+                }
+            }
+        }
+
         public string Name
         {
             get { return "bool"; }

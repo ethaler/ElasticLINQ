@@ -54,9 +54,14 @@ namespace ElasticLinq.Request.Visitors
             return base.VisitMethodCall(m);
         }
 
-        protected static ICriteria ApplyQueryContainsCriteria(ICriteria currentRoot, ICriteria newCriteria)
+        protected static ICriteria ApplyQueryMustContainCriteria(ICriteria currentRoot, ICriteria newCriteria)
         {
             return BoolQueryCriteria.CombineMustQueryCriteria(currentRoot, newCriteria);
+        }
+
+        protected static ICriteria ApplyQueryShouldContainCriteria(ICriteria currentRoot, ICriteria newCriteria)
+        {
+            return BoolQueryCriteria.CombineShouldQueryCriteria(currentRoot, newCriteria);
         }
 
         protected static ICriteria ApplyCriteria(ICriteria currentRoot, ICriteria newCriteria)
@@ -257,13 +262,14 @@ namespace ElasticLinq.Request.Visitors
             if (vRCritExpr != null && vRCritExpr.Criteria is IsQueryCriteria)
                 vRIsQueryCriteria = true;
 
-            //Query Expression like wildcard are handled by the Query and therefore should not end in the filter part as the AndCriteria would
+            ////Query Expression like wildcard are handled by the Query and therefore should not end in the filter part as the AndCriteria would
             if (vLIsQueryCriteria || vRIsQueryCriteria)
             {
-                if (vLIsQueryCriteria)
-                    return visitedR;
-                // right is query criteria 
-                return visitedL;
+                var root = ApplyQueryMustContainCriteria(null, vLCritExpr.Criteria);
+                var criteria = ApplyQueryMustContainCriteria( root, vRCritExpr.Criteria);
+                
+                return new CriteriaExpression(criteria);
+                
             }
             return new CriteriaExpression(
                 AndCriteria.Combine(AssertExpressionsOfType<CriteriaExpression>(visitedL, visitedR).Select(f => f.Criteria).ToArray()));
@@ -288,10 +294,10 @@ namespace ElasticLinq.Request.Visitors
             //Query Expression like wildcard are handled by the Query and therefore should not end in the filter part as the OrCriteria would
             if (vLIsQueryCriteria || vRIsQueryCriteria)
             {
-                if (vLIsQueryCriteria)
-                    return visitedR;
-                // right is query criteria 
-                return visitedL;
+                var root = ApplyQueryShouldContainCriteria( null, vLCritExpr.Criteria);
+                var criteria = ApplyQueryShouldContainCriteria( root, vRCritExpr.Criteria);
+                
+                return new CriteriaExpression(criteria);
             }
             return new CriteriaExpression(
                 OrCriteria.Combine(AssertExpressionsOfType<CriteriaExpression>(visitedL, visitedR).Select(f => f.Criteria).ToArray()));
