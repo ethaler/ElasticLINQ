@@ -21,11 +21,18 @@ namespace ElasticLinq.Request.Visitors
     {
         protected readonly IElasticMapping Mapping;
         protected readonly string Prefix;
+        private ElasticSearchRequest _searchRequest;
 
-        protected CriteriaExpressionVisitor(IElasticMapping mapping, string prefix)
+        protected CriteriaExpressionVisitor(IElasticMapping mapping, string prefix, ElasticSearchRequest searchRequest = null)
         {
             Mapping = new ElasticFieldsMappingWrapper(mapping);
             Prefix = prefix;
+            _searchRequest = searchRequest ?? new ElasticSearchRequest();
+        }
+
+        public ElasticSearchRequest SearchRequest
+        {
+            get { return _searchRequest; }
         }
 
         protected override Expression VisitMethodCall(MethodCallExpression m)
@@ -107,6 +114,13 @@ namespace ElasticLinq.Request.Visitors
                     if (m.Arguments.Count == 2)
                         return VisitEnumerableContainsMethodCall(m.Arguments[0], m.Arguments[1]);
                     break;
+
+                case "Any":
+                    if (m.Arguments.Count == 1)
+                        return CreateExists(new ConstantMemberPair(ConstantExpression.Constant(true), (MemberExpression)m.Arguments[0]), true);
+                    if (m.Arguments.Count == 2)
+                        return VisitContains("ContainsAny", m.Arguments[0], m.Arguments[1], TermsExecutionMode.@bool);
+                    break;
             }
 
             throw new NotSupportedException(string.Format("The Enumerable method '{0}' is not supported", m.Method.Name));
@@ -133,21 +147,24 @@ namespace ElasticLinq.Request.Visitors
 
         protected override Expression VisitMember(MemberExpression m)
         {
-            if (m.Member.DeclaringType == typeof(ElasticFields))
-                return m;
+            //why?
+            //if (m.Member.DeclaringType == typeof(ElasticFields))
+            //    return m;
 
-            switch (m.Expression.NodeType)
-            {
-                case ExpressionType.Parameter:
-                    return m;
+            //switch (m.Expression.NodeType)
+            //{
+            //    case ExpressionType.Parameter:
+            //        return m;
 
-                case ExpressionType.MemberAccess:
-                    if (m.Member.Name == "HasValue" && m.Member.DeclaringType.IsGenericOf(typeof(Nullable<>)))
-                        return m;
-                    break;
-            }
+            //    case ExpressionType.MemberAccess:
+            //        if (m.Member.Name == "HasValue" && m.Member.DeclaringType.IsGenericOf(typeof(Nullable<>)))
+            //            return m;
+            //        break;
+            //}
 
-            throw new NotSupportedException(string.Format("The MemberInfo '{0}' is not supported", m.Member.Name));
+            //throw new NotSupportedException(string.Format("The MemberInfo '{0}' is not supported", m.Member.Name));
+
+            return m;
         }
 
         protected override Expression VisitBinary(BinaryExpression b)
@@ -196,7 +213,7 @@ namespace ElasticLinq.Request.Visitors
             var cm = ConstantMemberPair.Create(left, right);
 
             if (cm != null)
-                return new CriteriaExpression(new PrefixCriteria(Mapping.GetFieldName(Prefix, cm.MemberExpression.Member), cm.ConstantExpression.Value.ToString()));
+                return new CriteriaExpression(new PrefixCriteria(Mapping.GetFieldName(Prefix, cm.MemberExpression), cm.ConstantExpression.Value.ToString()));
 
             throw new NotSupportedException("Prefix must be between a Member and a Constant");
         }
@@ -206,7 +223,7 @@ namespace ElasticLinq.Request.Visitors
             var cm = ConstantMemberPair.Create(left, right);
 
             if (cm != null)
-                return new CriteriaExpression(new RegexpCriteria(Mapping.GetFieldName(Prefix, cm.MemberExpression.Member), cm.ConstantExpression.Value.ToString()));
+                return new CriteriaExpression(new RegexpCriteria(Mapping.GetFieldName(Prefix, cm.MemberExpression), cm.ConstantExpression.Value.ToString()));
 
             throw new NotSupportedException("Regexp must be between a Member and a Constant");
         }
@@ -265,12 +282,27 @@ namespace ElasticLinq.Request.Visitors
             ////Query Expression like wildcard are handled by the Query and therefore should not end in the filter part as the AndCriteria would
             if (vLIsQueryCriteria || vRIsQueryCriteria)
             {
-                var root = ApplyQueryMustContainCriteria(null, vLCritExpr.Criteria);
-                var criteria = ApplyQueryMustContainCriteria( root, vRCritExpr.Criteria);
+                if(vLIsQueryCriteria)
+                    SearchRequest.Query = ApplyQueryMustContainCriteria(SearchRequest.Query, vLCritExpr.Criteria);
                 
-                return new CriteriaExpression(criteria);
-                
+                if(vRIsQueryCriteria)
+                    SearchRequest.Query = ApplyQueryMustContainCriteria(SearchRequest.Query, vRCritExpr.Criteria);
+
+                //return the side which isn't a query criteria
+                if (!vLIsQueryCriteria)
+                    return visitedL;
+                if (!vRIsQueryCriteria)
+                    return visitedR;
+                //both are query criteria return A NOP 
+                return new CriteriaExpression(new NOPCriteria(vLCritExpr.Criteria, vRCritExpr.Criteria));
             }
+
+            //habdle if one of the parts is a NOP 
+            if (vLCritExpr != null && vLCritExpr.Criteria is NOPCriteria)
+                return vRCritExpr;
+            if (vRCritExpr != null && vRCritExpr.Criteria is NOPCriteria)
+                return vLCritExpr;
+
             return new CriteriaExpression(
                 AndCriteria.Combine(AssertExpressionsOfType<CriteriaExpression>(visitedL, visitedR).Select(f => f.Criteria).ToArray()));
         }
@@ -294,11 +326,27 @@ namespace ElasticLinq.Request.Visitors
             //Query Expression like wildcard are handled by the Query and therefore should not end in the filter part as the OrCriteria would
             if (vLIsQueryCriteria || vRIsQueryCriteria)
             {
-                var root = ApplyQueryShouldContainCriteria( null, vLCritExpr.Criteria);
-                var criteria = ApplyQueryShouldContainCriteria( root, vRCritExpr.Criteria);
-                
-                return new CriteriaExpression(criteria);
+                if (vLIsQueryCriteria)
+                    SearchRequest.Query = ApplyQueryShouldContainCriteria(SearchRequest.Query, vLCritExpr.Criteria);
+
+                if (vRIsQueryCriteria)
+                    SearchRequest.Query = ApplyQueryShouldContainCriteria(SearchRequest.Query, vRCritExpr.Criteria);
+
+                //return the side which isn't a query criteria
+                if (!vLIsQueryCriteria)
+                    return visitedL;
+                if (!vRIsQueryCriteria)
+                    return visitedR;
+                //both are query criteria return A NOP 
+                return new CriteriaExpression(new NOPCriteria(vLCritExpr.Criteria, vRCritExpr.Criteria));
             }
+
+            //habdle if one of the parts is a NOP 
+            if (vLCritExpr != null && vLCritExpr.Criteria is NOPCriteria)
+                return vRCritExpr;
+            if (vRCritExpr != null && vRCritExpr.Criteria is NOPCriteria)
+                return vLCritExpr;
+
             return new CriteriaExpression(
                 OrCriteria.Combine(AssertExpressionsOfType<CriteriaExpression>(visitedL, visitedR).Select(f => f.Criteria).ToArray()));
         }
@@ -345,7 +393,7 @@ namespace ElasticLinq.Request.Visitors
             if (cm != null)
             {
                 var values = ((IEnumerable)cm.ConstantExpression.Value).Cast<object>().ToArray();
-                return new CriteriaExpression(TermsCriteria.Build(executionMode, Mapping.GetFieldName(Prefix, cm.MemberExpression.Member), cm.MemberExpression.Member, values));
+                return new CriteriaExpression(TermsCriteria.Build(executionMode, Mapping.GetFieldName(Prefix, cm.MemberExpression), cm.MemberExpression.Member, values));
             }
 
             throw new NotSupportedException(methodName + " must be between a Member and a Constant");
@@ -373,7 +421,7 @@ namespace ElasticLinq.Request.Visitors
             if (cm != null)
                 return cm.IsNullTest
                     ? CreateExists(cm, true)
-                    : new CriteriaExpression(new TermCriteria(Mapping.GetFieldName(Prefix, cm.MemberExpression.Member), cm.MemberExpression.Member, cm.ConstantExpression.Value));
+                    : new CriteriaExpression(new TermCriteria(Mapping.GetFieldName(Prefix, cm.MemberExpression), cm.MemberExpression.Member, cm.ConstantExpression.Value));
 
             throw new NotSupportedException("Equality must be between a Member and a Constant");
         }
@@ -393,7 +441,7 @@ namespace ElasticLinq.Request.Visitors
             if (cm != null)
                 return cm.IsNullTest
                     ? CreateExists(cm, false)
-                    : new CriteriaExpression(NotCriteria.Create(new TermCriteria(Mapping.GetFieldName(Prefix, cm.MemberExpression.Member), cm.MemberExpression.Member, cm.ConstantExpression.Value)));
+                    : new CriteriaExpression(NotCriteria.Create(new TermCriteria(Mapping.GetFieldName(Prefix, cm.MemberExpression), cm.MemberExpression.Member, cm.ConstantExpression.Value)));
 
             throw new NotSupportedException("A not-equal expression must consist of a constant and a member");
         }
@@ -404,7 +452,7 @@ namespace ElasticLinq.Request.Visitors
 
             if (cm != null)
             {
-                var field = Mapping.GetFieldName(Prefix, cm.MemberExpression.Member);
+                var field = Mapping.GetFieldName(Prefix, cm.MemberExpression);
                 return new CriteriaExpression(new RangeCriteria(field, cm.MemberExpression.Member, ExpressionTypeToRangeType(t), cm.ConstantExpression.Value));
             }
 

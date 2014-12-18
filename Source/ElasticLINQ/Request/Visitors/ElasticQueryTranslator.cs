@@ -20,7 +20,6 @@ namespace ElasticLinq.Request.Visitors
     /// </summary>
     internal class ElasticQueryTranslator : CriteriaExpressionVisitor
     {
-        private readonly ElasticSearchRequest searchRequest = new ElasticSearchRequest();
 
         private Type sourceType;
         private Type finalItemType;
@@ -28,7 +27,7 @@ namespace ElasticLinq.Request.Visitors
         private IElasticMaterializer materializer;
 
         private ElasticQueryTranslator(IElasticMapping mapping, string prefix)
-            : base(mapping, prefix)
+            : base(mapping, prefix, new ElasticSearchRequest())
         {
         }
 
@@ -49,16 +48,16 @@ namespace ElasticLinq.Request.Visitors
             else
                 CompleteHitTranslation(evaluated);
 
-            return new ElasticTranslateResult(searchRequest, materializer);
+            return new ElasticTranslateResult(SearchRequest, materializer);
         }
 
         private void CompleteHitTranslation(Expression evaluated)
         {
             Visit(evaluated);
-            searchRequest.DocumentType = Mapping.GetDocumentType(sourceType);
+            SearchRequest.DocumentType = Mapping.GetDocumentType(sourceType);
 
-            if (searchRequest.Filter == null && searchRequest.Query == null)
-                searchRequest.Filter = Mapping.GetTypeExistsCriteria(sourceType);
+            if (SearchRequest.Filter == null && SearchRequest.Query == null)
+                SearchRequest.Filter = Mapping.GetTypeExistsCriteria(sourceType);
 
             if (materializer == null)
                 materializer = new ElasticManyHitsMaterializer(itemProjector ?? DefaultItemProjector, finalItemType ?? sourceType);
@@ -67,16 +66,16 @@ namespace ElasticLinq.Request.Visitors
         private void CompleteFacetTranslation(RebindCollectionResult<IFacet> aggregated)
         {
             Visit(aggregated.Expression);
-            searchRequest.DocumentType = Mapping.GetDocumentType(sourceType);
+            SearchRequest.DocumentType = Mapping.GetDocumentType(sourceType);
 
-            searchRequest.Facets = aggregated.Collected.ToList();
-            searchRequest.SearchType = "count"; // We only want facets, not hits
+            SearchRequest.Facets = aggregated.Collected.ToList();
+            SearchRequest.SearchType = "count"; // We only want facets, not hits
             materializer = new ManyFacetsElasticMaterializer(r => aggregated.Projection.Compile().DynamicInvoke(r), aggregated.Projection.ReturnType);
         }
 
         protected override Expression VisitMethodCall(MethodCallExpression m)
         {
-            if (m.Method.DeclaringType == typeof (string) &&
+            if (m.Method.DeclaringType == typeof(string) &&
                 string.Equals(m.Method.Name, "Contains", StringComparison.InvariantCultureIgnoreCase))
                 return VisitStringContains(m);
             if (m.Method.DeclaringType == typeof(Queryable))
@@ -89,7 +88,7 @@ namespace ElasticLinq.Request.Visitors
                 return VisitElasticMethodsMethodCall(m);
 
             if (m.Method.Name == "Create")
-                    return m;
+                return m;
 
             return base.VisitMethodCall(m);
         }
@@ -99,22 +98,22 @@ namespace ElasticLinq.Request.Visitors
             var memberExp = m.Object as MemberExpression;
             if (memberExp == null)
                 throw new NotSupportedException("Contains is only supported as Member access e.g. obj.prop.Contains(\"a\") ");
-            
+
             var searchArg = m.Arguments.FirstOrDefault();
             var searchString = "*";
             if (searchArg != null)
             {
-                var search = searchArg.ToString().TrimStart(new []{'\"'}).TrimEnd(new []{'\"'});
-                
-                if(!string.IsNullOrWhiteSpace(search))
+                var search = searchArg.ToString().TrimStart(new[] { '\"' }).TrimEnd(new[] { '\"' });
+
+                if (!string.IsNullOrWhiteSpace(search))
                     searchString += search + "*";
             }
 
-            var criteriaExpression = new CriteriaExpression(new WildcardCriteria(Mapping.GetFieldName(Prefix, memberExp),memberExp.Member, searchString));
-            //searchRequest.Query = ApplyQueryContainsCriteria(searchRequest.Query, criteriaExpression.Criteria);
+            var criteriaExpression = new CriteriaExpression(new WildcardCriteria(Mapping.GetFieldName(Prefix, memberExp), memberExp.Member, searchString));
+            //SearchRequest.Query = ApplyQueryContainsCriteria(SearchRequest.Query, criteriaExpression.Criteria);
             return criteriaExpression;
         }
-        
+
         internal Expression VisitElasticQueryExtensionsMethodCall(MethodCallExpression m)
         {
             switch (m.Method.Name)
@@ -145,7 +144,7 @@ namespace ElasticLinq.Request.Visitors
         {
             var constantQueryExpression = (ConstantExpression)queryExpression;
             var criteriaExpression = new CriteriaExpression(new QueryStringCriteria(constantQueryExpression.Value.ToString()));
-            searchRequest.Query = ApplyCriteria(searchRequest.Query, criteriaExpression.Criteria);
+            SearchRequest.Query = ApplyCriteria(SearchRequest.Query, criteriaExpression.Criteria);
 
             return Visit(source);
         }
@@ -215,7 +214,7 @@ namespace ElasticLinq.Request.Visitors
             var single = methodName.StartsWith("Single");
             var orDefault = methodName.EndsWith("OrDefault");
 
-            searchRequest.Size = single ? 2 : 1;
+            SearchRequest.Size = single ? 2 : 1;
             finalItemType = source.Type;
             materializer = new OneHitElasticMaterializer(itemProjector ?? DefaultItemProjector, finalItemType, single, orDefault);
 
@@ -253,21 +252,24 @@ namespace ElasticLinq.Request.Visitors
 
         protected override Expression VisitMember(MemberExpression m)
         {
-            if (m.Member.DeclaringType == typeof(ElasticFields))
-                return m;
+            //why?
+            //if (m.Member.DeclaringType == typeof(ElasticFields))
+            //    return m;
 
-            switch (m.Expression.NodeType)
-            {
-                case ExpressionType.Parameter:
-                    return m;
+            //switch (m.Expression.NodeType)
+            //{
+            //    case ExpressionType.Parameter:
+            //        return m;
 
-                case ExpressionType.MemberAccess:
-                    if (m.Member.Name == "HasValue" && m.Member.DeclaringType.IsGenericOf(typeof(Nullable<>)))
-                        return m;
-                    break;
-            }
+            //    case ExpressionType.MemberAccess:
+            //        if (m.Member.Name == "HasValue" && m.Member.DeclaringType.IsGenericOf(typeof(Nullable<>)))
+            //            return m;
+            //        break;
+            //}
 
-            throw new NotSupportedException(string.Format("The MemberInfo '{0}' is not supported", m.Member.Name));
+            //throw new NotSupportedException(string.Format("The MemberInfo '{0}' is not supported", m.Member.Name));
+
+            return m;
         }
 
         private Expression VisitQuery(Expression source, Expression predicate)
@@ -279,7 +281,7 @@ namespace ElasticLinq.Request.Visitors
             if (criteriaExpression == null)
                 throw new NotSupportedException(string.Format("Unknown Query predicate '{0}'", body));
 
-            searchRequest.Query = ApplyCriteria(searchRequest.Query, criteriaExpression.Criteria);
+            SearchRequest.Query = ApplyCriteria(SearchRequest.Query, criteriaExpression.Criteria);
 
             return Visit(source);
         }
@@ -293,11 +295,14 @@ namespace ElasticLinq.Request.Visitors
             var criteriaExpression = body as CriteriaExpression;
             if (criteriaExpression == null)
                 throw new NotSupportedException(String.Format("Unknown Where predicate '{0}'", body));
-            //set query explicit if criteria is a single query criteria
-            if(criteriaExpression.Criteria is IsQueryCriteria)
-                searchRequest.Query = ApplyCriteria(searchRequest.Query, criteriaExpression.Criteria);
-            else
-                searchRequest.Filter = ApplyCriteria(searchRequest.Filter, criteriaExpression.Criteria);
+
+            if (!(criteriaExpression.Criteria is NOPCriteria))
+            {
+                if (criteriaExpression.Criteria is IsQueryCriteria)
+                    SearchRequest.Query = ApplyCriteria(SearchRequest.Query, criteriaExpression.Criteria);
+                else
+                    SearchRequest.Filter = ApplyCriteria(SearchRequest.Filter, criteriaExpression.Criteria);
+            }
 
             return Visit(source);
         }
@@ -310,7 +315,7 @@ namespace ElasticLinq.Request.Visitors
             {
                 var fieldName = Mapping.GetFieldName(Prefix, final.Member);
                 var ignoreUnmapped = final.Type.IsNullable(); // Consider a config switch?
-                searchRequest.SortOptions.Insert(0, new SortOption(fieldName, ascending, ignoreUnmapped));
+                SearchRequest.SortOptions.Insert(0, new SortOption(fieldName, ascending, ignoreUnmapped));
             }
 
             return Visit(source);
@@ -318,7 +323,7 @@ namespace ElasticLinq.Request.Visitors
 
         private Expression VisitOrderByScore(Expression source, bool ascending)
         {
-            searchRequest.SortOptions.Insert(0, new SortOption("_score", ascending));
+            SearchRequest.SortOptions.Insert(0, new SortOption("_score", ascending));
             return Visit(source);
         }
 
@@ -373,14 +378,14 @@ namespace ElasticLinq.Request.Visitors
             var projection = MemberProjectionExpressionVisitor.Rebind(Prefix, Mapping, selectExpression);
             var compiled = Expression.Lambda(projection.Expression, projection.Parameter).Compile();
             itemProjector = h => compiled.DynamicInvoke(h);
-            searchRequest.Fields.AddRange(projection.Collected);
+            SearchRequest.Fields.AddRange(projection.Collected);
         }
 
         private Expression VisitSkip(Expression source, Expression skipExpression)
         {
             var skipConstant = Visit(skipExpression) as ConstantExpression;
             if (skipConstant != null)
-                searchRequest.From = (int)skipConstant.Value;
+                SearchRequest.From = (int)skipConstant.Value;
             return Visit(source);
         }
 
@@ -391,10 +396,10 @@ namespace ElasticLinq.Request.Visitors
             {
                 var takeValue = (int)takeConstant.Value;
 
-                if (searchRequest.Size.HasValue)
-                    searchRequest.Size = Math.Min(searchRequest.Size.GetValueOrDefault(), takeValue);
+                if (SearchRequest.Size.HasValue)
+                    SearchRequest.Size = Math.Min(SearchRequest.Size.GetValueOrDefault(), takeValue);
                 else
-                    searchRequest.Size = takeValue;
+                    SearchRequest.Size = takeValue;
             }
             return Visit(source);
         }
