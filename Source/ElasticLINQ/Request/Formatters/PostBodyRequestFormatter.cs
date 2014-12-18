@@ -298,7 +298,10 @@ namespace ElasticLinq.Request.Formatters
             if (criteria.MustCriteria.Any())
                 jBool.Add(new JProperty("must", new JArray(criteria.MustCriteria.Select(Build).ToList())));
             if (criteria.ShouldCriteria.Any())
+            {
                 jBool.Add(new JProperty("should", new JArray(criteria.ShouldCriteria.Select(Build).ToList())));
+                jBool.Add(new JProperty("minimum_should_match", 1));
+            }
             if (criteria.MustNotCriteria.Any())
                 jBool.Add(new JProperty("must_not", new JArray(criteria.MustNotCriteria.Select(Build).ToList())));
 
