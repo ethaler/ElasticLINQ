@@ -198,6 +198,11 @@ namespace ElasticLinq.Request.Visitors
 
                 case "Count":
                     return VisitCount(m.Arguments[0]);
+
+                case "OfType":
+                case "Cast":
+                    return m.Arguments[0];
+
             }
 
             throw new NotSupportedException(string.Format("The Queryable method '{0}' is not supported", m.Method.Name));
