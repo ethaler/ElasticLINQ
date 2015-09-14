@@ -33,5 +33,10 @@ namespace ElasticLinq.Request.Visitors
                 ? Expression.Constant(Expression.Lambda(e).Compile().DynamicInvoke(null), e.Type)
                 : base.Visit(e);
         }
+
+        protected override Expression VisitMemberInit(MemberInitExpression node)
+        {
+            return node;
+        }
     }
 }
