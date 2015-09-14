@@ -1,8 +1,9 @@
 ﻿// Licensed under the Apache 2.0 License. See LICENSE.txt in the project root for more information.
-
 using ElasticLinq.Request.Visitors;
 using System;
+using System.Diagnostics;
 using System.Linq;
+using System.Linq.Expressions;
 using Xunit;
 
 namespace ElasticLinq.Test.Request.Visitors.ElasticQueryTranslation
@@ -108,6 +109,50 @@ namespace ElasticLinq.Test.Request.Visitors.ElasticQueryTranslation
             var translation = ElasticQueryTranslator.Translate(Mapping, "prefix", selected.Expression);
 
             Assert.Empty(translation.SearchRequest.Fields);
+        }
+
+        private class Subdata
+        {
+            public int Id { get; set; }
+            public string Name { get; set; }
+            public DateTime DateTime { get; set; }
+        }
+        private class Data
+        {
+            public int Id { get; set; }
+            public string Name { get; set; }
+
+            public Subdata Subdata { get; set; }
+        }
+
+        private class DataProjection
+        {
+            public int Id { get; set; }
+            public string Name { get; set; }
+            public DateTime Y { get; set; }
+        }
+
+        [Fact]
+        public void SelectAnonymousEntitySubProperty()
+        {
+            var queryable = new ElasticQuery<Data>(SharedProvider);
+            var selected = queryable.Select(r => new { Y = r.Subdata.DateTime });
+            var translation = ElasticQueryTranslator.Translate(Mapping, "prefix", selected.Expression);
+
+            Assert.Equal("prefix.subdata.dateTime", translation.SearchRequest.Fields[0]);
+        }
+
+
+        [Fact]
+        public void SelectNewClassWithEntitySubproperty()
+        {
+            var queryable = new ElasticQuery<Data>(SharedProvider);
+            var selected = queryable.Select(r => new DataProjection { Id = r.Id, Name = r.Name, Y = r.Subdata.DateTime });
+            var translation = ElasticQueryTranslator.Translate(Mapping, "prefix", selected.Expression);
+
+            Assert.Equal("prefix.id", translation.SearchRequest.Fields[0]);
+            Assert.Equal("prefix.name", translation.SearchRequest.Fields[1]);
+            Assert.Equal("prefix.subdata.dateTime", translation.SearchRequest.Fields[2]);
         }
     }
 }
