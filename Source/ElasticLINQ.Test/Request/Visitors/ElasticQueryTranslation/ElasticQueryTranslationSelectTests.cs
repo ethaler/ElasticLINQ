@@ -133,7 +133,7 @@ namespace ElasticLinq.Test.Request.Visitors.ElasticQueryTranslation
         }
 
         [Fact]
-        public void SelectAnonymousEntitySubProperty()
+        public void SelectAnonymousEntityWithObjectPropertyAccessTranslatesToFields()
         {
             var queryable = new ElasticQuery<Data>(SharedProvider);
             var selected = queryable.Select(r => new { Y = r.Subdata.DateTime });
@@ -144,7 +144,7 @@ namespace ElasticLinq.Test.Request.Visitors.ElasticQueryTranslation
 
 
         [Fact]
-        public void SelectNewClassWithEntitySubproperty()
+        public void SelectNewClassWithEntitySubpropertyTranslatesToFields()
         {
             var queryable = new ElasticQuery<Data>(SharedProvider);
             var selected = queryable.Select(r => new DataProjection { Id = r.Id, Name = r.Name, Y = r.Subdata.DateTime });
@@ -153,6 +153,18 @@ namespace ElasticLinq.Test.Request.Visitors.ElasticQueryTranslation
             Assert.Equal("prefix.id", translation.SearchRequest.Fields[0]);
             Assert.Equal("prefix.name", translation.SearchRequest.Fields[1]);
             Assert.Equal("prefix.subdata.dateTime", translation.SearchRequest.Fields[2]);
+        }
+
+        [Fact]
+        public void SelectObjectTranslatesToFields()
+        {
+            var queryable = new ElasticQuery<Data>(SharedProvider);
+            var selected = queryable.Select(r => r.Subdata);
+            var translation = ElasticQueryTranslator.Translate(Mapping, "prefix", selected.Expression);
+
+            Assert.True(translation.SearchRequest.Fields.Contains("prefix.subdata.id"));
+            Assert.True(translation.SearchRequest.Fields.Contains("prefix.subdata.name"));
+            Assert.True(translation.SearchRequest.Fields.Contains("prefix.subdata.dateTime"));
         }
     }
 }
