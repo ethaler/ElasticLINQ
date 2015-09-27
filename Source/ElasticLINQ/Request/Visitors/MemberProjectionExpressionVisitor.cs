@@ -41,13 +41,50 @@ namespace ElasticLinq.Request.Visitors
             if (m.Expression != null && m.Expression.NodeType == ExpressionType.Parameter)
                 return VisitFieldSelection(m);
 
+            if (m.Expression != null && m.Expression.NodeType == ExpressionType.MemberAccess)
+                return VisitReducingParameterMemberAccessFieldSelection(m);
+            
             return base.VisitMember(m);
+        }
+
+        protected internal Expression VisitReducingParameterMemberAccessFieldSelection(MemberExpression m)
+        {
+            LinkedList<Expression> ll = new LinkedList<Expression>();
+            MemberExpression root = m;
+            ll.AddFirst(m);
+            while (root != null && root.Expression is MemberExpression)
+            {
+                root = root.Expression as MemberExpression;
+                ll.AddFirst(root);
+            }
+            if (root != null && root.Expression.NodeType == ExpressionType.Parameter)
+            {
+                var fieldName = Mapping.GetFieldName(Prefix, root.Member);
+                ll.RemoveFirst();
+                while (root != null && root != m)
+                {
+                    root = ll.First.Value as MemberExpression;
+                    ll.RemoveFirst();
+                    fieldName = Mapping.GetFieldName(fieldName, root.Member);
+                    if (ll.Count > 0)
+                        root = ll.First.Value as MemberExpression;
+                    else
+                        root = null;
+                }
+                fieldNames.Add(fieldName);
+                var getFieldExpression = Expression.Call(null, GetDictionaryValueMethod,
+                    Expression.PropertyOrField(BindingParameter, "fields"), Expression.Constant(fieldName),
+                    Expression.Constant(m.Type));
+                return Expression.Convert(getFieldExpression, m.Type);
+            }
+            //couldn't do anything
+            return m;
         }
 
         protected override Expression VisitElasticField(MemberExpression m)
         {
             var member = base.VisitElasticField(m);
-            fieldNames.Add("_" +  m.Member.Name.ToLowerInvariant());
+            fieldNames.Add("_" + m.Member.Name.ToLowerInvariant());
             return member;
         }
 
@@ -63,7 +100,12 @@ namespace ElasticLinq.Request.Visitors
         {
             JToken token;
             if (dictionary.TryGetValue(key, out token))
+            {
+                //workaround elastic delivers arrays as results in certain queries ... not 100% sure if it's right or wrong
+                if (token.Type == JTokenType.Array && (expectedType.IsValueType || expectedType == typeof(string) ))
+                    return ((JArray) token)[0].ToObject(expectedType);
                 return token.ToObject(expectedType);
+            }
 
             return expectedType.IsValueType
                 ? Activator.CreateInstance(expectedType)

@@ -36,7 +36,7 @@ namespace ElasticLinq.Request.Visitors
 
         protected override Expression VisitMemberInit(MemberInitExpression node)
         {
-            return node;
+            return Expression.MemberInit(node.NewExpression, node.Bindings);
         }
     }
 }

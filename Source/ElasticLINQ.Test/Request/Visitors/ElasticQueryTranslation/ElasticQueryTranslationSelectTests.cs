@@ -159,7 +159,7 @@ namespace ElasticLinq.Test.Request.Visitors.ElasticQueryTranslation
         public void SelectObjectTranslatesToFields()
         {
             var queryable = new ElasticQuery<Data>(SharedProvider);
-            var selected = queryable.Select(r => r.Subdata);
+            var selected = queryable.Select(r => new{r.Subdata.Id, r.Subdata.Name, r.Subdata.DateTime});
             var translation = ElasticQueryTranslator.Translate(Mapping, "prefix", selected.Expression);
 
             Assert.True(translation.SearchRequest.Fields.Contains("prefix.subdata.id"));
