@@ -53,6 +53,8 @@ namespace ElasticLinq.Request.Visitors
                     break;
 
                 case "Contains":
+                    if (m.Method.DeclaringType == typeof(string))
+                        return VisitStringContains(m);
                     if (TypeHelper.FindIEnumerable(m.Method.DeclaringType) != null)
                         return VisitEnumerableContainsMethodCall(m.Object, m.Arguments[0]);
                     break;
@@ -61,6 +63,25 @@ namespace ElasticLinq.Request.Visitors
             return base.VisitMethodCall(m);
         }
 
+        internal Expression VisitStringContains(MethodCallExpression m)
+        {
+            var memberExp = m.Object as MemberExpression;
+            if (memberExp == null)
+                throw new NotSupportedException("Contains is only supported as Member access e.g. obj.prop.Contains(\"a\") ");
+
+            var searchArg = m.Arguments.FirstOrDefault();
+            var searchString = "*";
+            if (searchArg != null)
+            {
+                var search = searchArg.ToString().TrimStart(new[] { '\"' }).TrimEnd(new[] { '\"' });
+
+                if (!string.IsNullOrWhiteSpace(search))
+                    searchString += search + "*";
+            }
+
+            var criteriaExpression = new CriteriaExpression(new WildcardCriteria(Mapping.GetFieldName(Prefix, memberExp), memberExp.Member, searchString));
+            return criteriaExpression;
+        }
         protected static ICriteria ApplyQueryMustContainCriteria(ICriteria currentRoot, ICriteria newCriteria)
         {
             return BoolQueryCriteria.CombineMustQueryCriteria(currentRoot, newCriteria);
