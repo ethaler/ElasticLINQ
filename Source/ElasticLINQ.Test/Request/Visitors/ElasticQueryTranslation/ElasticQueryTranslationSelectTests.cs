@@ -111,11 +111,20 @@ namespace ElasticLinq.Test.Request.Visitors.ElasticQueryTranslation
             Assert.Empty(translation.SearchRequest.Fields);
         }
 
+        private class SubSubdata
+        {
+            public int Id { get; set; }
+            public string Name { get; set; }
+
+            public Subdata Parent { get; set; }
+        }
         private class Subdata
         {
             public int Id { get; set; }
             public string Name { get; set; }
             public DateTime DateTime { get; set; }
+
+            public SubSubdata Child { get; set; }
         }
         private class Data
         {
@@ -130,6 +139,10 @@ namespace ElasticLinq.Test.Request.Visitors.ElasticQueryTranslation
             public int Id { get; set; }
             public string Name { get; set; }
             public DateTime Y { get; set; }
+
+            public string C1 { get; set; }
+
+            public string P1 { get; set; }
         }
 
         [Fact]
@@ -147,12 +160,14 @@ namespace ElasticLinq.Test.Request.Visitors.ElasticQueryTranslation
         public void SelectNewClassWithEntitySubpropertyTranslatesToFields()
         {
             var queryable = new ElasticQuery<Data>(SharedProvider);
-            var selected = queryable.Select(r => new DataProjection { Id = r.Id, Name = r.Name, Y = r.Subdata.DateTime });
+            var selected = queryable.Select(r => new DataProjection { Id = r.Id, Name = r.Name, Y = r.Subdata.DateTime, C1 = r.Subdata.Child.Name, P1 = r.Subdata.Child.Parent.Name });
             var translation = ElasticQueryTranslator.Translate(Mapping, "prefix", selected.Expression);
 
             Assert.Equal("prefix.id", translation.SearchRequest.Fields[0]);
             Assert.Equal("prefix.name", translation.SearchRequest.Fields[1]);
             Assert.Equal("prefix.subdata.dateTime", translation.SearchRequest.Fields[2]);
+            Assert.Equal("prefix.subdata.child.name", translation.SearchRequest.Fields[3]);
+            Assert.Equal("prefix.subdata.child.parent.name", translation.SearchRequest.Fields[4]);
         }
 
         [Fact]

@@ -59,17 +59,16 @@ namespace ElasticLinq.Request.Visitors
             }
             if (root != null && root.Expression.NodeType == ExpressionType.Parameter)
             {
-                var fieldName = Mapping.GetFieldName(Prefix, root.Member);
-                ll.RemoveFirst();
-                while (root != null && root != m)
+                var fieldName = Prefix;
+                while (root != null)
                 {
-                    root = ll.First.Value as MemberExpression;
-                    ll.RemoveFirst();
                     fieldName = Mapping.GetFieldName(fieldName, root.Member);
+                    ll.RemoveFirst();
                     if (ll.Count > 0)
                         root = ll.First.Value as MemberExpression;
                     else
                         root = null;
+                    
                 }
                 fieldNames.Add(fieldName);
                 var getFieldExpression = Expression.Call(null, GetDictionaryValueMethod,
