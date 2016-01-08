@@ -1,5 +1,6 @@
 ﻿// Licensed under the Apache 2.0 License. See LICENSE.txt in the project root for more information.
 
+using System;
 using ElasticLinq.Request.Visitors;
 using System.Linq;
 using Xunit;
@@ -182,6 +183,56 @@ namespace ElasticLinq.Test.Request.Visitors.ElasticQueryTranslation
             Assert.NotNull(sortOptions);
             Assert.Equal(1, sortOptions.Count);
             Assert.True(sortOptions[0].IgnoreUnmapped);
+        }
+
+
+        private class SubSubdata
+        {
+            public int Id { get; set; }
+            public string Name { get; set; }
+
+            public Subdata Parent { get; set; }
+        }
+        private class Subdata
+        {
+            public int Id { get; set; }
+            public string Name { get; set; }
+            public DateTime DateTime { get; set; }
+
+            public SubSubdata Child { get; set; }
+        }
+        private class Data
+        {
+            public int Id { get; set; }
+            public string Name { get; set; }
+
+            public Subdata Subdata { get; set; }
+        }
+
+        [Fact]
+        public void OrderBySubProperty()
+        {
+            var queryable = new ElasticQuery<Data>(SharedProvider);
+            var ordered = queryable.OrderBy(d => d.Subdata.Name);
+
+            var sortOptions = ElasticQueryTranslator.Translate(Mapping, "prefix", ordered.Expression).SearchRequest.SortOptions;
+            Assert.Equal(1, sortOptions.Count);
+
+            var sortOption = sortOptions[0];
+            Assert.Equal("prefix.subdata.name", sortOption.Name);
+        }
+
+        [Fact]
+        public void OrderBySubSubProperty()
+        {
+            var queryable = new ElasticQuery<Data>(SharedProvider);
+            var ordered = queryable.OrderBy(d => d.Subdata.Child.Name);
+
+            var sortOptions = ElasticQueryTranslator.Translate(Mapping, "prefix", ordered.Expression).SearchRequest.SortOptions;
+            Assert.Equal(1, sortOptions.Count);
+
+            var sortOption = sortOptions[0];
+            Assert.Equal("prefix.subdata.child.name", sortOption.Name);
         }
     }
 }
