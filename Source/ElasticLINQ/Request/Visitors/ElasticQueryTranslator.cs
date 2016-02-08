@@ -318,7 +318,39 @@ namespace ElasticLinq.Request.Visitors
             var final = Visit(lambda.Body) as MemberExpression;
             if (final != null)
             {
-                var fieldName = Mapping.GetFieldName(Prefix, final.Member);
+                var fieldName = Prefix;
+                if (final.Member.DeclaringType == typeof(ElasticFields) && final.Member.Name == "Score")
+                {
+                    fieldName = Mapping.GetFieldName(Prefix, final.Member);
+
+                }
+                else
+                {
+                    LinkedList<Expression> ll = new LinkedList<Expression>();
+                    MemberExpression root = final;
+                    ll.AddFirst(final);
+
+                    while (root != null && root.Expression is MemberExpression)
+                    {
+                        root = root.Expression as MemberExpression;
+                        ll.AddFirst(root);
+                    }
+                    if (root != null && root.Expression.NodeType == ExpressionType.Parameter)
+                    {
+
+                        while (root != null)
+                        {
+                            fieldName = Mapping.GetFieldName(fieldName, root.Member);
+                            ll.RemoveFirst();
+                            if (ll.Count > 0)
+                                root = ll.First.Value as MemberExpression;
+                            else
+                                root = null;
+
+                        }
+                    }
+                }
+
                 var ignoreUnmapped = final.Type.IsNullable(); // Consider a config switch?
                 SearchRequest.SortOptions.Insert(0, new SortOption(fieldName, ascending, ignoreUnmapped));
             }
